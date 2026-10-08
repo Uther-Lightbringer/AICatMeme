@@ -19,3 +19,9 @@ output/
 # FX中间帧由gen_fx_beam_clash.py生成，不进仓库
 fx/beam_clash/frames/
 fx/beam_clash/audio.wav
+
+# 用户隐私数据
+user_submissions.csv
+
+# 字体有版权(中易黑体)，使用者自备
+simhei.ttf
