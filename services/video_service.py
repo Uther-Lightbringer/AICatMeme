@@ -200,7 +200,7 @@ def process_multi_scene_ffmpeg(index, scene, temp_dir):
         fx_dur = len(fx_frames) / 30.0
         fx_at = float(scene.get('fx_at') or 0) or max(0.0, total - fx_dur - 0.6)
         fx_boom = float(scene.get('fx_boom', 2.45) or 0)
-        print(f"⚡ [FX] 对波特效 at={fx_at:.1f}s dur={fx_dur:.1f}s")
+        print(f"⚡ [FX] {fx_name} at={fx_at:.1f}s dur={fx_dur:.1f}s")
         filters.append(f"[{fx_i}:v]setpts=PTS+{fx_at}/TB[fxv]")
         filters.append(f"[{prev_v}][fxv]overlay=x=0:y=0:eof_action=pass[vfx]")
         shk = (",scale=1120:1120,setsar=1,crop=1080:1080:"
@@ -281,6 +281,26 @@ def process_single_scene_ffmpeg(index, scene, temp_dir):
         cmd.extend(["-framerate", "30", "-start_number", str(start), "-i", pat])
         cmd.extend(["-i", audio] if audio else ["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo"])
 
+        # 特效包(可选, 输入3=帧 4=音频)
+        fx_name = (scene.get('fx') or 'none').strip()
+        fx_on = fx_name not in ('', 'none') and os.path.isdir(os.path.join(FX_FOLDER, fx_name))
+        if fx_on:
+            fx_dir = os.path.join(FX_FOLDER, fx_name)
+            fx_frames = sorted(glob.glob(os.path.join(fx_dir, "frames", "*.png")))
+            if not fx_frames:
+                raise FileNotFoundError(f"特效包缺帧: {fx_dir}/frames/")
+            fx_pat, fx_start = image_seq_input(fx_frames)
+            cmd.extend(["-framerate", "30", "-start_number", str(fx_start), "-i", fx_pat])
+            fx_audio = os.path.join(fx_dir, "audio.wav")
+            if not os.path.exists(fx_audio):
+                fx_audio = os.path.join(fx_dir, "audio.mp3")
+            cmd.extend(["-i", fx_audio] if os.path.exists(fx_audio) else ["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo"])
+            fx_i, fx_aud_i = 3, 4
+            fx_dur = len(fx_frames) / 30.0
+            fx_at = float(scene.get('fx_at') or 0) or max(0.0, dur - fx_dur - 0.6)
+            fx_boom = float(scene.get('fx_boom', 2.45) or 0)
+            print(f"⚡ [FX] {fx_name} at={fx_at:.1f}s dur={fx_dur:.1f}s")
+
         # 构建滤镜链
         filters.append(f"[0:v]scale=1080:1080:force_original_aspect_ratio=increase,crop=1080:1080,setsar=1,trim=duration={dur}[bg]")
         filters.append(f"[1:v]scale=750:-1,setsar=1[anim]")
@@ -297,8 +317,20 @@ def process_single_scene_ffmpeg(index, scene, temp_dir):
         texts.append(f"drawtext=fontfile='{font_safe}':expansion=none:textfile='{name_txt}':x=(w-text_w)/2:y={name_y}:fontsize=52:fontcolor=yellow:borderw=3:bordercolor=black:box=1:boxcolor=black@0.45:boxborderw=16")
         texts.append(f"drawtext=fontfile='{font_safe}':expansion=none:textfile='{dialogue_txt}':x=(w-text_w)/2:y=1080-220:fontsize=52:fontcolor=white:borderw=3:bordercolor=black:box=1:boxcolor=black@0.45:boxborderw=16:line_spacing=-30")
         
-        filters.append(f"[v1]{','.join(texts)}[vout]")
-        filters.append(f"[2:a]atrim=duration={dur}[aout]")
+        if fx_on:
+            filters.append(f"[{fx_i}:v]setpts=PTS+{fx_at}/TB[fxv]")
+            filters.append(f"[v1][fxv]overlay=x=0:y=0:eof_action=pass[v1fx]")
+            shk = (",scale=1120:1120,setsar=1,crop=1080:1080:"
+                   f"x='(in_w-out_w)/2+16*sin(2*PI*20*(t-{fx_at+fx_boom}))*between(t,{fx_at+fx_boom-0.25},{fx_at+fx_boom+0.5})':"
+                   f"y='(in_h-out_h)/2+13*sin(2*PI*17*(t-{fx_at+fx_boom}))*between(t,{fx_at+fx_boom-0.25},{fx_at+fx_boom+0.5})'")
+            filters.append(f"[v1fx]{','.join(texts)}{shk}[vout]")
+            fx_delay = int(fx_at * 1000)
+            filters.append(f"[2:a]atrim=duration={dur},asetpts=PTS-STARTPTS[a1]")
+            filters.append(f"[{fx_aud_i}:a]atrim=duration={fx_dur},adelay={fx_delay}|{fx_delay},asetpts=PTS-STARTPTS[af]")
+            filters.append("[a1][af]amix=inputs=2:duration=longest:normalize=0[aout]")
+        else:
+            filters.append(f"[v1]{','.join(texts)}[vout]")
+            filters.append(f"[2:a]atrim=duration={dur}[aout]")
         total_dur = dur
 
     elif stype == 'dialogue' and len(chars) >= 2:
@@ -338,7 +370,7 @@ def process_single_scene_ffmpeg(index, scene, temp_dir):
             fx_dur = len(fx_frames) / 30.0
             fx_at = float(scene.get('fx_at') or 0) or max(0.0, total_dur - fx_dur - 0.6)
             fx_boom = float(scene.get('fx_boom', 2.45) or 0)
-            print(f"⚡ [FX] 对波特效 at={fx_at:.1f}s dur={fx_dur:.1f}s")
+            print(f"⚡ [FX] {fx_name} at={fx_at:.1f}s dur={fx_dur:.1f}s")
 
         # 视频合成链 (利用 enable 滤镜实现极速帧切换)
         filters.append(f"[0:v]scale=1080:1080:force_original_aspect_ratio=increase,crop=1080:1080,setsar=1,trim=duration={total_dur}[bg]")
