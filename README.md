@@ -100,6 +100,46 @@ streamlit run dashboard.py
 | **`PreProcessVideo.py`** | **素材加工** | 绿幕抠图核心。采用 `colorkey` + `despill` 滤镜，保证素材边缘丝滑。 |
 | **`app.py`** | **后端核心** | 生产级 Flask 服务，支持 AI 脚本分析与视频合成调度。 |
 | **`dashboard.py`** | **前端 UI** | 基于 Streamlit。支持多语言切换、多模型配置及左右分栏视频预览。 |
+| **`services/video_service.py`** | **渲染引擎** | 纯 FFmpeg 渲染：single/dialogue/multi 三模式、flat/depth 站位、字幕底条、特效叠加与震屏。 |
+| **`gen_fx_*.py`** | **特效生成** | 用 PIL 程序化生成特效帧序列，产物落在 `fx/<特效名>/frames/` + `audio.wav`。 |
+
+---
+
+### 🎆 特效系统 (FX)
+
+镜头剧本里每个 scene 可选挂一个特效包：
+
+```json
+{
+  "title": "终局对决·仙法对波", "place": "stage", "scene_type": "dialogue",
+  "fx": "beam_clash", "fx_at": 4.0, "fx_boom": 2.45,
+  "characters": [...]
+}
+```
+
+- `fx`：特效包名，对应 `fx/<名字>/` 目录（内含 `frames/*.png` 与可选 `audio.wav/mp3`）；填 `none` 或不填则无特效
+- `fx_at`：特效起始秒，`0` = 自动对齐场景收尾
+- `fx_boom`：该特效的爆炸点偏移秒（beam_clash 专用，震屏以它对齐）
+
+**已上线特效：**
+
+| 特效名 | 效果 | 适用镜头 | 状态 |
+| --- | --- | --- | --- |
+| `beam_clash` | 双猫对波：蓄力球→锥形光束→撞点拉锯僵持（双向火花/气浪环/电弧）→白闪爆炸（三层粗环+12放射光）→震屏，3.5s+合成音效 | dialogue/multi 双猫大招对决 | ✅ |
+
+**特效池规划**（按优先级，欢迎认领/许愿）：
+
+- 战斗系：`thunder_strike` 雷劫天降（分形闪电落点）、`slash` 剑气横扫、`meteor` 天降陨石、`fire_burst` 火发爆发
+- 仪式系：`charging_pillar` 升级光柱、`summon` 召唤阵、`teleport` 瞬移残影、`shield` 护盾罩受击波纹、`heal` 治疗绿雨、`freeze` 冰封蔓延
+- 玩梗系：`money_rain` 钞票雨、`hearts` 心动攻击、`anger_flame` 怒焰具象、`dizzy` 晕眩转圈
+- 通用系：`screen_flash` 受击闪屏、`zoom_punch` 冲击推进
+
+**新增一个特效的步骤**（渲染管线已全面通用化，不用动 video_service）：
+
+1. 复制 `gen_fx_beam_clash.py` 改名为 `gen_fx_<新特效>.py`，按需设计时间轴（PIL 画帧 + `wave` 合成音）
+2. 产物路径固定：`fx/<新特效名>/frames/%04d.png` + `fx/<新特效名>/audio.wav`
+3. scene 里 `"fx": "<新特效名>"` 即用；`app.py` 的导播 prompt 里补一句使用规则，AI 就会在合适桥段自动挂特效
+4. 注意事项：光束/线条画粗（>28px，防 scale 震屏链+压缩吃对比度）；爆炸帧数≥3帧白闪；音频用 `adelay` 思路对齐 `fx_at`
 
 ---
 

@@ -182,20 +182,23 @@ def process_multi_scene_ffmpeg(index, scene, temp_dir):
         prev_v = f"va{seq}"
 
     # 特效: 对波(可选, 帧按 dialogue 双猫口位 290/790 绘制)
-    fx_on = scene.get('fx') == 'beam_clash'
+    fx_name = (scene.get('fx') or 'none').strip()
+    fx_on = fx_name not in ('', 'none') and os.path.isdir(os.path.join(FX_FOLDER, fx_name))
     if fx_on:
-        fx_dir = os.path.join(FX_FOLDER, 'beam_clash')
+        fx_dir = os.path.join(FX_FOLDER, fx_name)
         fx_frames = sorted(glob.glob(os.path.join(fx_dir, "frames", "*.png")))
         if not fx_frames:
-            raise FileNotFoundError("找不到对波特效帧")
+            raise FileNotFoundError(f"特效包缺帧: {fx_dir}/frames/")
         fx_pat, fx_start = image_seq_input(fx_frames)
         cmd.extend(["-framerate", "30", "-start_number", str(fx_start), "-i", fx_pat])
         fx_i = in_idx; in_idx += 1
         fx_audio = os.path.join(fx_dir, "audio.wav")
+        if not os.path.exists(fx_audio):
+            fx_audio = os.path.join(fx_dir, "audio.mp3")
         cmd.extend(["-i", fx_audio] if os.path.exists(fx_audio) else ["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo"])
         fx_aud_i = in_idx; in_idx += 1
         fx_dur = len(fx_frames) / 30.0
-        fx_at = float(scene.get('fx_at', max(0.0, total - 3.9)) or 0)
+        fx_at = float(scene.get('fx_at') or 0) or max(0.0, total - fx_dur - 0.6)
         fx_boom = float(scene.get('fx_boom', 2.45) or 0)
         print(f"⚡ [FX] 对波特效 at={fx_at:.1f}s dur={fx_dur:.1f}s")
         filters.append(f"[{fx_i}:v]setpts=PTS+{fx_at}/TB[fxv]")
@@ -320,19 +323,20 @@ def process_single_scene_ffmpeg(index, scene, temp_dir):
         cmd.extend(["-i", r_audio] if r_audio else ["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo"])
 
         # 特效: 双猫对波(可选)
-        fx_on = scene.get('fx') == 'beam_clash'
+        fx_name = (scene.get('fx') or 'none').strip()
+        fx_on = fx_name not in ('', 'none') and os.path.isdir(os.path.join(FX_FOLDER, fx_name))
         if fx_on:
-            fx_dir = os.path.join(FX_FOLDER, 'beam_clash')
+            fx_dir = os.path.join(FX_FOLDER, fx_name)
             fx_frames = sorted(glob.glob(os.path.join(fx_dir, "frames", "*.png")))
             if not fx_frames:
-                raise FileNotFoundError("找不到对波特效帧")
+                raise FileNotFoundError(f"特效包缺帧: {fx_dir}/frames/")
             fx_pat, fx_start = image_seq_input(fx_frames)
             cmd.extend(["-framerate", "30", "-start_number", str(fx_start), "-i", fx_pat])
             fx_audio = os.path.join(fx_dir, "audio.wav")
             cmd.extend(["-i", fx_audio] if os.path.exists(fx_audio) else ["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo"])
             fx_i, fx_aud_i = 7, 8
             fx_dur = len(fx_frames) / 30.0
-            fx_at = float(scene.get('fx_at', max(0.0, dur_l - 3.9)) or 0)
+            fx_at = float(scene.get('fx_at') or 0) or max(0.0, total_dur - fx_dur - 0.6)
             fx_boom = float(scene.get('fx_boom', 2.45) or 0)
             print(f"⚡ [FX] 对波特效 at={fx_at:.1f}s dur={fx_dur:.1f}s")
 

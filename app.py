@@ -39,6 +39,7 @@ def process_request(data_json, client_ip):
         schema_str = json.dumps(StoryAnalysis.model_json_schema(), ensure_ascii=False)
         system_instruction = (
             "镜头模式选择规则：只有1个角色用single；正好2个角色对话用dialogue；3个及以上角色或群戏/围观场景必须用multi，multi须为每个角色填at(说话秒数依次递增)，角色>=3时用layout=depth(前后排)，2个角色用flat。\n"
+            "特效使用规则：故事高潮处双方大招对轰/绝招对决的镜头，scene填 fx=\"beam_clash\"（双猫对波：蓄力→光束僵持对轰→爆炸震屏，3.5秒），普通叙事镜头 fx=\"none\"。同一故事最多用1-2次，用在最爆炸的转折点。\n"
             '你是一个专业的AI视频导播。请根据用户提供的故事生成连续的镜头脚本。\n'
             f'必须严格按照以下 JSON Schema 格式返回结果（只返回合法的 JSON 对象，不要包含 markdown 标记）：\n{schema_str}\n'
             '重要要求：台词文本使用中文，简洁有力。'
@@ -80,6 +81,11 @@ def process_request(data_json, client_ip):
             # 背景兜底：LLM 偶尔编不存在的场景名（如"会议室"），统一回落 others
             if not glob.glob(os.path.join(cfg.BG_FOLDER, f"{sc.get('place', 'others')}.*")):
                 sc['place'] = 'others'
+            # 特效兜底：LLM 编不存在的特效名时置空（特效包先要在 fx/ 下生成好）
+            fx_val = (sc.get('fx') or 'none').strip()
+            if fx_val not in ('', 'none') and not os.path.isdir(os.path.join(cfg.FX_FOLDER, fx_val)):
+                print(f"⚠️ 特效包不存在，已忽略: {fx_val}")
+                sc['fx'] = 'none'
         user_id = generate_password()
         output_path = f'{cfg.OUTPUT_FOLDER}/{user_id}.mp4'
         print(f'AI导播脚本: {json.dumps(generated_data, ensure_ascii=False, indent=2)}')
