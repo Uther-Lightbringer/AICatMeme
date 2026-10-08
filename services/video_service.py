@@ -195,13 +195,14 @@ def process_multi_scene_ffmpeg(index, scene, temp_dir):
         cmd.extend(["-i", fx_audio] if os.path.exists(fx_audio) else ["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo"])
         fx_aud_i = in_idx; in_idx += 1
         fx_dur = len(fx_frames) / 30.0
-        fx_at = float(scene.get('fx_at', max(0.0, total - 1.6)) or 0)
+        fx_at = float(scene.get('fx_at', max(0.0, total - 3.9)) or 0)
+        fx_boom = float(scene.get('fx_boom', 2.45) or 0)
         print(f"⚡ [FX] 对波特效 at={fx_at:.1f}s dur={fx_dur:.1f}s")
         filters.append(f"[{fx_i}:v]setpts=PTS+{fx_at}/TB[fxv]")
         filters.append(f"[{prev_v}][fxv]overlay=x=0:y=0:eof_action=pass[vfx]")
         shk = (",scale=1120:1120,setsar=1,crop=1080:1080:"
-               f"x='(in_w-out_w)/2+16*sin(2*PI*20*(t-{fx_at+1.0}))*between(t,{fx_at+0.85},{fx_at+1.5})':"
-               f"y='(in_h-out_h)/2+13*sin(2*PI*17*(t-{fx_at+1.0}))*between(t,{fx_at+0.85},{fx_at+1.5})'")
+               f"x='(in_w-out_w)/2+16*sin(2*PI*20*(t-{fx_at+fx_boom}))*between(t,{fx_at+fx_boom-0.25},{fx_at+fx_boom+0.5})':"
+               f"y='(in_h-out_h)/2+13*sin(2*PI*17*(t-{fx_at+fx_boom}))*between(t,{fx_at+fx_boom-0.25},{fx_at+fx_boom+0.5})'")
         filters.append(f"[vfx]{','.join(texts)}{shk}[vout]")
         fx_delay = int(fx_at * 1000)
         filters.append(f"[{fx_aud_i}:a]atrim=duration={fx_dur},adelay={fx_delay}|{fx_delay},asetpts=PTS-STARTPTS[af]")
@@ -331,7 +332,8 @@ def process_single_scene_ffmpeg(index, scene, temp_dir):
             cmd.extend(["-i", fx_audio] if os.path.exists(fx_audio) else ["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo"])
             fx_i, fx_aud_i = 7, 8
             fx_dur = len(fx_frames) / 30.0
-            fx_at = float(scene.get('fx_at', max(0.0, dur_l - 1.6)) or 0)
+            fx_at = float(scene.get('fx_at', max(0.0, dur_l - 3.9)) or 0)
+            fx_boom = float(scene.get('fx_boom', 2.45) or 0)
             print(f"⚡ [FX] 对波特效 at={fx_at:.1f}s dur={fx_dur:.1f}s")
 
         # 视频合成链 (利用 enable 滤镜实现极速帧切换)
@@ -369,8 +371,8 @@ def process_single_scene_ffmpeg(index, scene, temp_dir):
             filters.append(f"[{fx_i}:v]setpts=PTS+{fx_at}/TB[fxv]")
             filters.append(f"[v4][fxv]overlay=x=0:y=0:eof_action=pass[v4fx]")
             shk = (",scale=1120:1120,setsar=1,crop=1080:1080:"
-                   f"x='(in_w-out_w)/2+16*sin(2*PI*20*(t-{fx_at+1.0}))*between(t,{fx_at+0.85},{fx_at+1.5})':"
-                   f"y='(in_h-out_h)/2+13*sin(2*PI*17*(t-{fx_at+1.0}))*between(t,{fx_at+0.85},{fx_at+1.5})'")
+                   f"x='(in_w-out_w)/2+16*sin(2*PI*20*(t-{fx_at+fx_boom}))*between(t,{fx_at+fx_boom-0.25},{fx_at+fx_boom+0.5})':"
+                   f"y='(in_h-out_h)/2+13*sin(2*PI*17*(t-{fx_at+fx_boom}))*between(t,{fx_at+fx_boom-0.25},{fx_at+fx_boom+0.5})'")
             filters.append(f"[v4fx]{','.join(texts)}{shk}[vout]")
         else:
             filters.append(f"[v4]{','.join(texts)}[vout]")
