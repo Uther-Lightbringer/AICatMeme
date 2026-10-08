@@ -125,14 +125,24 @@ streamlit run dashboard.py
 
 | 特效名 | 效果 | 适用镜头 | 状态 |
 | --- | --- | --- | --- |
-| `beam_clash` | 双猫对波：蓄力球→锥形光束→撞点拉锯僵持（双向火花/气浪环/电弧）→白闪爆炸（三层粗环+12放射光）→震屏，3.5s+合成音效 | dialogue/multi 双猫大招对决 | ✅ |
+| `beam_clash` | 双猫对波：蓄力球→锥形光束→撞点拉锯僵持（双向火花/气浪环/电弧）→白闪爆炸 | dialogue/multi | ✅ |
+| `fire_burst` | 烈火诀：火球凝聚→火焰喷发→命中爆炸 | single/dialogue | ✅ |
+| `freeze` | 寒冰狱：冰棱蔓延→冰塑封裹→碎冰飘落 | single | ✅ |
+| `thunder_strike` | 天雷诛邪：聚云→分形闪电→落点冲击环→电蛇残留 | single | ✅ |
+| `slash` | 剑气纵横：月牙形剑气横扫→切割线→火花 | dialogue/single | ✅ |
+| `shield` | 金刚护体：网格能量罩→受击波纹→罩碎飞散 | single | ✅ |
+| `summon` | 召唤阵：地面阵图旋转→紫光柱冲天→顶端炸开 | single | ✅ |
+| `screen_flash` | 终局：黑白频闪→血红→暗角收拢 | single | ✅ |
+| `teleport` | 瞬移：残影消散→空间波纹→碎片汇聚重组 | single | ✅ |
+| `heal` | 治疗雨：绿雨下降→环绕绿环→上升粒子→脉冲 | single | ✅ |
+| `money_rain` | 钞票雨：旋转钞票+金币弹跳+¥金闪 | single | ✅ |
+| `hearts` | 心动攻击：粉雾+飘升爱心+心跳大爱心 | single | ✅ |
+| `anger_flame` | 怒焰：黑红火焰+头顶青筋+地面龟裂+红暗角 | single | ✅ |
+| `dizzy` | 晕眩：头顶转星星+螺旋线+眩晕波纹 | single | ✅ |
+| `meteor` | 天降陨石：火球拖尾下落→落地白闪→地面冲击环+烟柱 | single | ✅ |
+| `zoom_punch` | 冲击推进：放射速度线→白闪冲击环→多重震波+碎片 | single | ✅ |
 
-**特效池规划**（按优先级，欢迎认领/许愿）：
-
-- 战斗系：`thunder_strike` 雷劫天降（分形闪电落点）、`slash` 剑气横扫、`meteor` 天降陨石、`fire_burst` 火发爆发
-- 仪式系：`charging_pillar` 升级光柱、`summon` 召唤阵、`teleport` 瞬移残影、`shield` 护盾罩受击波纹、`heal` 治疗绿雨、`freeze` 冰封蔓延
-- 玩梗系：`money_rain` 钞票雨、`hearts` 心动攻击、`anger_flame` 怒焰具象、`dizzy` 晕眩转圈
-- 通用系：`screen_flash` 受击闪屏、`zoom_punch` 冲击推进
+**特效池规划**（后续候选）：`charging_pillar` 升级光柱、`fire_tornado` 火焰旋风、`poison_cloud` 毒瘴、`summon_dragon` 神龙降临、`time_slow` 子弹时间、`afterimage` 残影连击。
 
 **新增一个特效的步骤**（渲染管线已全面通用化，不用动 video_service）：
 

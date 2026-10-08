@@ -342,7 +342,288 @@ def render_flash(f, t, img):
         img.alpha_composite(Image.composite(
             Image.new("RGBA", (W, H), (0, 0, 0, int(200*p))), Image.new("RGBA", (W, H), (0,0,0,0)), vig))
 
-# ============================================================ 音频配方
+# ============================================================ 瞬移
+def render_teleport(f, t, img):
+    d = ImageDraw.Draw(img)
+    rnd = random.Random(8000 + f)
+    cy = BODY
+    if t < 0.3:  # 原地虚影渐隐
+        p = t / 0.3
+        a = int(200 * (1 - p))
+        layer_of(img, lambda dd, a=a: dd.rounded_rectangle(
+            [CX-180, cy-320, CX+180, cy+240], radius=80, fill=(140, 200, 255, a)), blur=16, core=False)
+        for _ in range(6):  # 闪烁残片
+            fx_ = CX + rnd.uniform(-170, 170); fy_ = cy + rnd.uniform(-300, 220)
+            d.rectangle([fx_-6, fy_-20, fx_+6, fy_+20], fill=(160, 210, 255, int(180*(1-p))))
+    elif t < 0.8:  # 空间波纹+碎片
+        p = (t - 0.3) / 0.5
+        for ring in range(3):
+            rr = int((40 + 260 * ease_out(max(0, p - ring*0.15))) * 1.0)
+            if rr <= 40: continue
+            layer_of(img, lambda dd, rr=rr, p=p, ring=ring: dd.ellipse(
+                [CX-rr, cy-rr, CX+rr, cy+rr],
+                outline=(120, 190, 255, int(220*(1-(p-ring*0.15)/0.85))), width=10),
+                blur=8, core=False)
+        for _ in range(18):  # 碎片向中心汇聚
+            ang = rnd.uniform(0, 2*math.pi); dist = lerp(320, 60, ease_out(p))
+            fx_ = CX + math.cos(ang)*dist; fy_ = cy + math.sin(ang)*dist*0.8
+            r = rnd.uniform(3, 9)
+            d.rectangle([fx_-r, fy_-r*2.4, fx_+r, fy_+r*2.4], fill=(150, 205, 255, int(230*p)))
+    elif t < 1.2:  # 重组白闪
+        p = (t - 0.8) / 0.4
+        flash = Image.new("RGBA", (W, H), (200, 230, 255, int(230*(1-p))))
+        img.alpha_composite(flash)
+        for _ in range(8):
+            fx_ = CX + rnd.uniform(-140, 140); fy_ = cy + rnd.uniform(-260, 200)
+            r = rnd.uniform(4, 10)
+            d.ellipse([fx_-r, fy_-r, fx_+r, fy_+r], fill=(255, 255, 255, int(220*(1-p))))
+    else:  # 就位尘环
+        p = (t - 1.2) / 0.8
+        rr = int(80 + 260 * ease_out(p))
+        layer_of(img, lambda dd, rr=rr, p=p: dd.ellipse(
+            [CX-rr, cy+200-rr*0.4, CX+rr, cy+200+rr*0.4],
+            outline=(160, 210, 255, int(160*(1-p))), width=8), blur=8, core=False)
+
+# ============================================================ 治疗雨
+def render_heal(f, t, img):
+    d = ImageDraw.Draw(img)
+    rnd = random.Random(4200 + f)
+    # 绿色光点持续下降(全屏)
+    for i in range(22):
+        gx = 120 + (i * 137 + f * 3) % 840
+        gy = (i * 173 + f * 11) % 900 + 60
+        r = rnd.uniform(3, 8)
+        d.line([gx, gy - 16, gx, gy], fill=(120, 255, 150, 150), width=3)
+        layer_of(img, lambda dd, gx=gx, gy=gy, r=r: dd.ellipse(
+            [gx-r, gy-r, gx+r, gy+r], fill=(140, 255, 170, 220)), blur=8, core=False)
+    # 猫身环绕绿环
+    p = min(1, t / 0.8)
+    for ring in range(2):
+        rr = int(lerp(120, 330, ease_out(p)) * (1 - ring * 0.25))
+        layer_of(img, lambda dd, rr=rr, p=p: dd.ellipse(
+            [CX-rr, BODY-rr, CX+rr, BODY+rr],
+            outline=(100, 255, 150, int(180*p)), width=6), blur=12, core=False)
+    # 上升粒子
+    for _ in range(10):
+        ux = CX + rnd.uniform(-200, 200)
+        uy = FOOT - ((t * 320 + rnd.uniform(0, 400)) % 420)
+        r = rnd.uniform(3, 7)
+        d.ellipse([ux-r, uy-r, ux+r, uy+r], fill=(180, 255, 190, 220))
+    # 结束脉冲
+    if t > 1.9:
+        pp = (t - 1.9) / 0.6
+        rr = int(60 + 380 * ease_out(pp))
+        layer_of(img, lambda dd, rr=rr, pp=pp: dd.ellipse(
+            [CX-rr, BODY-rr, CX+rr, BODY+rr],
+            outline=(140, 255, 170, int(220*(1-pp))), width=20), blur=10, core=False)
+
+# ============================================================ 钞票雨
+def render_money(f, t, img):
+    d = ImageDraw.Draw(img)
+    rnd = random.Random(3100 + f)
+    for i in range(14):  # 旋转钞票
+        bx = 100 + (i * 157 + f * 2) % 880
+        by = (i * 191 + f * 9) % 900
+        wdt, hgt = 46, 26
+        rot = (i * 0.7 + t * 3) % (2 * math.pi)
+        col = [(250, 220, 90), (160, 230, 150), (240, 240, 200)][i % 3]
+        pts = []
+        for (ox, oy) in [(-wdt, -hgt), (wdt, -hgt), (wdt, hgt), (-wdt, hgt)]:
+            rx = ox * math.cos(rot) - oy * math.sin(rot) * 0.5
+            ry = ox * math.sin(rot) + oy * math.cos(rot) * 0.5
+            pts.append((bx + rx, by + ry))
+        d.polygon(pts, fill=col + (235,), outline=(180, 150, 60, 255))
+        d.text((bx - 8, by - 10), "¥", fill=(150, 120, 30, 255))
+    for i in range(6):  # 金币弹跳
+        cx_ = 300 + i * 100
+        cy_ = 900 - abs(math.sin(t * 4 + i) * 260)
+        r = 14
+        d.ellipse([cx_-r, cy_-r, cx_+r, cy_+r], fill=(255, 200, 60, 255), outline=(200, 150, 30, 255))
+        d.ellipse([cx_-r//2, cy_-r//2, cx_+r//2, cy_+r//2], fill=(255, 235, 150, 255))
+    # 中央大¥金闪
+    pulse = 0.5 + 0.5 * math.sin(2 * math.pi * 2 * t)
+    layer_of(img, lambda dd, pulse=pulse: dd.text(
+        (CX-40, BODY-70), "¥", fill=(255, 220, 100, int(200*pulse))), blur=10, core=False)
+
+# ============================================================ 心动
+def render_hearts(f, t, img):
+    d = ImageDraw.Draw(img)
+    rnd = random.Random(5500 + f)
+    def heart(dd, x, y, s, col=(255, 90, 150), a=255):
+        dd.ellipse([x-s, y-s*0.8, x, y], fill=col + (a,))
+        dd.ellipse([x, y-s*0.8, x+s, y], fill=col + (a,))
+        dd.polygon([(x-s*0.95, y-s*0.35), (x+s*0.95, y-s*0.35), (x, y+s*0.9)], fill=col + (a,))
+    # 粉雾
+    layer_of(img, lambda dd: dd.ellipse(
+        [CX-400, BODY-400, CX+400, BODY+400], fill=(255, 130, 180, 60)), blur=40, core=False)
+    # 爱心飘升
+    for i in range(12):
+        hx = CX + math.sin(t * 2 + i * 1.3) * rnd.uniform(60, 220)
+        hy = BODY + 120 - ((t * 150 + i * 80) % 520)
+        s = rnd.uniform(10, 26) * (1 + 0.15 * math.sin(2 * math.pi * 3 * t + i))
+        heart(d, hx, hy, s, (255, rnd.randint(80, 160), rnd.randint(150, 200)), 220)
+    # 中央大爱心(心跳双跳)
+    beat = max(0, math.sin(2 * math.pi * 1.6 * t) ** 4)
+    s = 56 + 26 * beat
+    heart(d, CX, BODY - 100, s, (255, 70, 130), int(200 + 55 * beat))
+    layer_of(img, lambda dd, s=s: heart(dd, CX, BODY - 100, s), blur=18, core=False)
+
+
+# ============================================================ 怒焰
+def render_anger(f, t, img):
+    d = ImageDraw.Draw(img)
+    rnd = random.Random(6600 + f)
+    # 红色脉动暗角
+    pulse = 0.5 + 0.5 * math.sin(2 * math.pi * 2.2 * t)
+    vig = Image.new("L", (W, H), 0)
+    vd = ImageDraw.Draw(vig)
+    vd.ellipse([-200, -200, W+200, H+200], fill=200)
+    img.alpha_composite(Image.composite(
+        Image.new("RGBA", (W, H), (120, 0, 0, int(120*pulse))),
+        Image.new("RGBA", (W, H), (0, 0, 0, 0)), vig))
+    # 黑红火焰从两侧上升
+    for side in [-1, 1]:
+        for i in range(7):
+            fx_ = CX + side * rnd.uniform(140, 300)
+            fh = rnd.uniform(120, 300) * (0.7 + 0.5*pulse)
+            fy0 = FOOT - 40
+            wob = math.sin(t * 8 + i) * 22
+            pts = [(fx_-26, fy0), (fx_+wob, fy0 - fh*0.55), (fx_+wob*1.4, fy0 - fh)]
+            layer_of(img, lambda dd, p=pts: dd.polygon(
+                [p[0], (p[1][0]+14, p[1][1]), p[2], (p[1][0]-14, p[1][1])],
+                fill=(20, 10, 30, 220)), blur=10, core=False)
+            layer_of(img, lambda dd, p=pts: dd.polygon(
+                [(p[0][0]*0.7+p[1][0]*0.3, p[0][1]), (p[1][0]+6, p[1][1]), (p[2][0]*0.6+p[1][0]*0.4, p[2][1])],
+                fill=(200, 40, 30, 200)), blur=6, core=False)
+    # 头顶青筋(#形)
+    gx, gy = CX, HEAD - 60
+    a = int(230 * (0.6 + 0.4*pulse))
+    d.line([(gx-40, gy-26), (gx-14, gy)], fill=(255, 255, 255, a), width=6)
+    d.line([(gx+40, gy-26), (gx+14, gy)], fill=(255, 255, 255, a), width=6)
+    d.line([(gx-14, gy), (gx+14, gy)], fill=(255, 255, 255, a), width=6)
+    # 地面龟裂
+    for i in range(7):
+        ang = math.pi + i * math.pi / 6
+        ln = rnd.uniform(120, 300)
+        d.line([CX, FOOT-10, CX+math.cos(ang)*ln, FOOT-10-math.sin(ang)*ln*0.3],
+               fill=(40, 30, 30, 200), width=5)
+
+# ============================================================ 晕眩
+def render_dizzy(f, t, img):
+    d = ImageDraw.Draw(img)
+    # 头顶转星星(五角星绕头顶公转+自转)
+    sx, sy, orbit = CX, HEAD - 90, 110
+    for k in range(3):
+        ang = t * 5 + k * math.pi * 2 / 3
+        bx = sx + math.cos(ang) * orbit
+        by = sy + math.sin(ang) * orbit * 0.5
+        s = 20
+        pts = []
+        for i in range(10):
+            rr = s if i % 2 == 0 else s * 0.45
+            a2 = i * math.pi / 5 + t * 3
+            pts.append((bx + math.cos(a2)*rr, by + math.sin(a2)*rr))
+        d.polygon(pts, fill=(255, 230, 90, 240), outline=(200, 150, 20, 255))
+    # 螺旋线
+    for i in range(30):
+        a2 = i * 0.45 + t * 6
+        rr = 12 + i * 5
+        x2 = sx + math.cos(a2) * rr
+        y2 = sy + math.sin(a2) * rr * 0.6
+        d.ellipse([x2-3, y2-3, x2+3, y2+3], fill=(255, 240, 130, 200))
+    # 眩晕波纹
+    p = (t % 1.0)
+    rr = int(60 + 260 * p)
+    layer_of(img, lambda dd, rr=rr, p=p: dd.ellipse(
+        [sx-rr, sy-rr*0.6, sx+rr, sy+rr*0.6],
+        outline=(255, 235, 120, int(150*(1-p))), width=8), blur=8, core=False)
+
+# ============================================================ 陨石
+def render_meteor(f, t, img):
+    d = ImageDraw.Draw(img)
+    rnd = random.Random(7700 + f)
+    if t < 1.0:  # 火球下落加速
+        p = ease_out(t / 1.0) ** 1.6
+        mx = lerp(200, CX, p)
+        my = lerp(-60, FOOT - 60, p)
+        r = int(lerp(30, 90, p))
+        # 拖尾
+        for i in range(10):
+            tr = r * (1 - i * 0.08)
+            tx = mx - (mx - 200) * i * 0.06
+            ty = my + i * 55
+            layer_of(img, lambda dd, tr=tr, tx=tx, ty=ty, i=i: dd.ellipse(
+                [tx-tr, ty-tr, tx+tr, ty+tr], fill=(255, 150 - i*10, 40, int(180 - i*15))),
+                blur=14, core=False)
+        layer_of(img, lambda dd, r=r: dd.ellipse(
+            [mx-r, my-r, mx+r, my+r], fill=(255, 210, 120, 240)), blur=18, core=False)
+    elif t < 1.3:  # 落地白闪
+        p = (t - 1.0) / 0.3
+        img.alpha_composite(Image.new("RGBA", (W, H), (255, 220, 160, int(200*(1-p)))))
+    else:  # 地面冲击+烟柱
+        p = (t - 1.3) / 1.2
+        for ring in range(3):
+            rr = int(30 + 460 * ease_out(max(0, p - ring*0.12)))
+            if rr <= 30: continue
+            layer_of(img, lambda dd, rr=rr, p=p, ring=ring: dd.ellipse(
+                [CX-rr, FOOT-rr*0.35, CX+rr, FOOT+rr*0.35],
+                outline=(255, 180 - ring*30, 80, int(230*(1-max(0,p-ring*0.12)))), width=16),
+                blur=8, core=False)
+        for i in range(8):  # 碎石
+            ang = -math.pi/2 + (i - 3.5) * 0.3
+            dist = 120 + 380 * ease_out(p)
+            fx_ = CX + math.cos(ang) * dist * 1.1
+            fy_ = FOOT - 40 + math.sin(ang) * dist + 0.5 * 500 * p * p
+            r = rnd.uniform(5, 12)
+            d.ellipse([fx_-r, fy_-r, fx_+r, fy_+r], fill=(90, 70, 60, int(240*(1-p*0.7))))
+        for i in range(6):  # 烟柱
+            sx = CX + rnd.uniform(-90, 90)
+            sy = FOOT - 60 - p * 260
+            r = int(26 + 50 * p)
+            layer_of(img, lambda dd, sx=sx, sy=sy, r=r, p=p: dd.ellipse(
+                [sx-r, sy-r, sx+r, sy+r], fill=(110, 100, 95, int(90*(1-p)))), blur=18, core=False)
+
+# ============================================================ 冲击推进
+def render_punch(f, t, img):
+    d = ImageDraw.Draw(img)
+    if t < 0.3:  # 放射速度线
+        p = t / 0.3
+        for i in range(24):
+            ang = i * math.pi / 12 + rnd_shift(f, i)
+            ln = lerp(200, 620, ease_out(p))
+            x2 = CX + math.cos(ang) * ln
+            y2 = BODY + math.sin(ang) * ln
+            d.line([CX + math.cos(ang)*120, BODY + math.sin(ang)*120, x2, y2],
+                   fill=(255, 255, 255, int(200*p)), width=int(lerp(2, 7, p)))
+    elif t < 0.5:  # 白闪+冲击环
+        p = (t - 0.3) / 0.2
+        img.alpha_composite(Image.new("RGBA", (W, H), (255, 255, 255, int(230*(1-p)))))
+        rr = int(40 + 380 * ease_out(p))
+        layer_of(img, lambda dd, rr=rr: dd.ellipse(
+            [CX-rr, BODY-rr, CX+rr, BODY+rr], outline=(255, 240, 200, 230), width=18),
+            blur=8, core=False)
+    else:  # 重击震波+碎片
+        p = (t - 0.5) / 1.0
+        for ring in range(4):  # 多重扁环
+            rr = int(50 + 300 * ease_out(max(0, p - ring*0.15)))
+            if rr <= 50: continue
+            layer_of(img, lambda dd, rr=rr, p=p, ring=ring: dd.ellipse(
+                [CX-rr, BODY-rr*0.4, CX+rr, BODY+rr*0.4],
+                outline=(255, 220, 150, int(210*(1-max(0,p-ring*0.15)))), width=10),
+                blur=8, core=False)
+        for i in range(16):
+            ang = i * math.pi / 8
+            dist = 100 + 420 * ease_out(p)
+            fx_ = CX + math.cos(ang) * dist
+            fy_ = BODY + math.sin(ang) * dist * 0.5
+            r = 8 * (1 - p * 0.6)
+            d.polygon([(fx_-r, fy_-r), (fx_+r, fy_-r*0.4), (fx_+r*0.3, fy_+r), (fx_-r*0.5, fy_+r*0.5)],
+                      fill=(240, 230, 210, int(240*(1-p))))
+
+def rnd_shift(f, i):
+    return (i * 2654435761 % 360) * math.pi / 180
+
+
 AUDIO = {
     "fire_burst": lambda t, r: (0.5*math.sin(2*math.pi*(120+200*min(t,0.5)/0.5)*t)*math.exp(-2*min(t,0.5))
                                 + (0.9*r.uniform(-1,1)*math.exp(-4*max(0,t-1.0)) if t>=1.0 else 0)),
@@ -362,6 +643,22 @@ AUDIO = {
                            + (0.8*r.uniform(-1,1)*math.exp(-2.5*(t-2.45))+0.7*math.sin(2*math.pi*50*(t-2.45))*math.exp(-8*(t-2.45)) if t>=2.45 else 0),
     "screen_flash": lambda t, r: r.uniform(-1,1)*math.exp(-2.5*t)*(0.8 if t<0.5 else 0.5)
                                  + (0.8*math.sin(2*math.pi*40*t)*math.exp(-5*t) if t<0.7 else 0),
+    "teleport": lambda t, r: (0.45*math.sin(2*math.pi*(300+900*min(t,0.3)/0.3)*t)*math.exp(-1*min(t,0.3))
+                              + (0.5*math.sin(2*math.pi*(1400-1100*min(max(0,t-0.3),0.5)/0.5)*(t-0.3))*math.exp(-3*max(0,t-0.3)) if 0.3<=t<1.2 else 0)
+                              + (0.55*(r.uniform(-1,1))*math.exp(-6*max(0,t-1.2)) if t>=1.2 else 0)),
+    "heal": lambda t, r: (0.3*math.sin(2*math.pi*528*t) + 0.25*math.sin(2*math.pi*792*t)) * min(1, t/0.5)
+                         + (0.5*math.sin(2*math.pi*440*t)*math.exp(-2*(t-1.9)) + 0.4*math.sin(2*math.pi*660*t)*math.exp(-3*(t-1.9)) if t>=1.9 else 0),
+    "money_rain": lambda t, r: (0.0 if not (0.2 < (t*3) % 1.0 < 0.45) else 0.5*math.sin(2*math.pi*(2200+800*r.random())*t)*math.exp(-8*((t*3)%1.0-0.2)))
+                              + 0.12*math.sin(2*math.pi*330*t),
+    "hearts": lambda t, r: ((0.7*math.sin(2*math.pi*70*(t%0.75)) * (1 if t%0.75<0.2 else 0.2)) + 0.15*math.sin(2*math.pi*520*t)),
+    "anger_flame": lambda t, r: 0.5*math.sin(2*math.pi*(40+30*math.sin(2*math.pi*2*t))*t)
+                          + (0.4*r.uniform(-1,1)*math.exp(-3*max(0,t-0.5))*(0.4+0.6*math.sin(2*math.pi*8*t)) ),
+    "dizzy": lambda t, r: 0.4*math.sin(2*math.pi*(380+260*math.sin(2*math.pi*2.5*t))*t)
+                          + 0.15*math.sin(2*math.pi*1200*t)*math.exp(-2*((t*2)%1)),
+    "meteor": lambda t, r: (0.4*(r.uniform(-1,1)+math.sin(2*math.pi*(900-500*t)*t)*0.6)*min(1,t/0.3)
+                            + (0.85*r.uniform(-1,1)*math.exp(-4*(t-1.0)) + 0.8*math.sin(2*math.pi*50*(t-1.0))*math.exp(-6*(t-1.0)) + 0.4*r.uniform(-1,1)*math.exp(-20*max(0,(t-1.0)-0.05)) if t>=1.0 else 0)),
+    "zoom_punch": lambda t, r: (0.5*math.sin(2*math.pi*(200+1200*min(t,0.3)/0.3)*t)*min(1,t/0.1)
+                                + (0.85*math.sin(2*math.pi*65*(t-0.3))*math.exp(-7*(t-0.3)) + 0.6*r.uniform(-1,1)*math.exp(-6*(t-0.3)) + 0.5*math.sin(2*math.pi*1800*(t-0.3))*math.exp(-12*(t-0.3)) if t>=0.3 else 0)),
 }
 
 RENDERERS = {
@@ -372,6 +669,14 @@ RENDERERS = {
     "shield": (render_shield, 2.0, None),
     "summon": (render_summon, 3.0, None),
     "screen_flash": (render_flash, 1.5, None),
+    "teleport": (render_teleport, 2.0, None),
+    "heal": (render_heal, 2.5, None),
+    "money_rain": (render_money, 2.5, None),
+    "hearts": (render_hearts, 2.0, None),
+    "anger_flame": (render_anger, 2.0, None),
+    "dizzy": (render_dizzy, 2.0, None),
+    "meteor": (render_meteor, 2.5, None),
+    "zoom_punch": (render_punch, 1.5, None),
 }
 
 if __name__ == "__main__":

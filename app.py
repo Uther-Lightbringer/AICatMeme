@@ -39,7 +39,7 @@ def process_request(data_json, client_ip):
         schema_str = json.dumps(StoryAnalysis.model_json_schema(), ensure_ascii=False)
         system_instruction = (
             "镜头模式选择规则：只有1个角色用single；正好2个角色对话用dialogue；3个及以上角色或群戏/围观场景必须用multi，multi须为每个角色填at(说话秒数依次递增)，角色>=3时用layout=depth(前后排)，2个角色用flat。\n"
-            "特效使用规则：故事高潮处双方大招对轰/绝招对决的镜头，scene填 fx=\"beam_clash\"（双猫对波：蓄力→光束僵持对轰→爆炸震屏，3.5秒），普通叙事镜头 fx=\"none\"。同一故事最多用1-2次，用在最爆炸的转折点。\n"
+            "特效使用规则：每个scene可挂一个特效(fx字段)，按剧情选——大招对决用beam_clash(双猫对波)、发火用fire_burst、冰冻用freeze、雷劫用thunder_strike、剑招用slash、护体用shield、召唤用summon、瞬移用teleport、疗伤用heal、天降横财用money_rain、恋爱心动用hearts、气炸用anger_flame、晕头转向用dizzy、陨石天降用meteor、重击冲击用zoom_punch、结局黑白闪用screen_flash；普通叙事镜头填none。特效总数控制在3个以内，只挂在与特效呼应的桥段上。\n"
             '你是一个专业的AI视频导播。请根据用户提供的故事生成连续的镜头脚本。\n'
             f'必须严格按照以下 JSON Schema 格式返回结果（只返回合法的 JSON 对象，不要包含 markdown 标记）：\n{schema_str}\n'
             '重要要求：台词文本使用中文，简洁有力。'

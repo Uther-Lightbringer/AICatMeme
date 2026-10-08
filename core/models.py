@@ -3,8 +3,8 @@ from typing import List
 
 EMOTIONS = "imploring, broken, surprised, laughing, blank, showoff, proud, irritable, shy, smirk, willful, cheering, hungry, anxious, scolding, astonished, pitiful, disdain, striving, others, giggle, painful, majestic, innocent, frustrated, helpless, excited, brave, happy, shocked, eating, awkward, despair"
 PLACES = "beach, forest, highway, lab, Mountain, port, river, concert, fantacy, others, rooftop, stage, airport, amusementpark, bank, cinema, classroom, grassland, gym, home, hospital, kitchen, library, museum, park, playground, pool, restaurant, school, shop, station, theater, village"
-FX_LIST = "none, beam_clash"
-FX_GUIDE = "可选视觉特效(填特效名或none)。beam_clash=双猫对波(龙珠式僵持对轰+爆炸+震屏, 仅dialogue/multi双猫镜头, 故事高潮处使用)"
+FX_LIST = "none, beam_clash, fire_burst, freeze, thunder_strike, slash, shield, summon, screen_flash, teleport, heal, money_rain, hearts, anger_flame, dizzy, meteor, zoom_punch"
+FX_GUIDE = "可选视觉特效(填特效名或none)：对波beam_clash、烈火fire_burst、冰封freeze、天雷thunder_strike、剑气slash、护盾shield、召唤summon、闪屏screen_flash、瞬移teleport、治疗heal、钞票雨money_rain、心动hearts、怒焰anger_flame、晕眩dizzy、陨石meteor、冲击zoom_punch"
 
 class Character(BaseModel):
     name: str = Field(description="角色名，简短")
