@@ -197,7 +197,8 @@ def process_multi_scene_ffmpeg(index, scene, temp_dir):
         fx_dur = len(fx_frames) / 30.0
         fx_at = float(scene.get('fx_at', max(0.0, total - 1.6)) or 0)
         print(f"⚡ [FX] 对波特效 at={fx_at:.1f}s dur={fx_dur:.1f}s")
-        filters.append(f"[{prev_v}][{fx_i}:v]overlay=x=0:y=0:enable='between(t,{fx_at},{fx_at+fx_dur})'[vfx]")
+        filters.append(f"[{fx_i}:v]setpts=PTS+{fx_at}/TB[fxv]")
+        filters.append(f"[{prev_v}][fxv]overlay=x=0:y=0:eof_action=pass[vfx]")
         shk = (",scale=1120:1120,setsar=1,crop=1080:1080:"
                f"x='(in_w-out_w)/2+16*sin(2*PI*20*(t-{fx_at+1.0}))*between(t,{fx_at+0.85},{fx_at+1.5})':"
                f"y='(in_h-out_h)/2+13*sin(2*PI*17*(t-{fx_at+1.0}))*between(t,{fx_at+0.85},{fx_at+1.5})'")
@@ -364,7 +365,9 @@ def process_single_scene_ffmpeg(index, scene, temp_dir):
         
         if fx_on:
             # 对波: 猫合成后叠特效帧 → 字幕 → 爆炸瞬间屏幕震动(scale+crop位移)
-            filters.append(f"[v4][{fx_i}:v]overlay=x=0:y=0:enable='between(t,{fx_at},{fx_at+fx_dur})'[v4fx]")
+            # setpts把fx帧时钟平移到fx_at, overlay窗口双保险; eof_action=pass播完即消失(不定格)
+            filters.append(f"[{fx_i}:v]setpts=PTS+{fx_at}/TB[fxv]")
+            filters.append(f"[v4][fxv]overlay=x=0:y=0:eof_action=pass[v4fx]")
             shk = (",scale=1120:1120,setsar=1,crop=1080:1080:"
                    f"x='(in_w-out_w)/2+16*sin(2*PI*20*(t-{fx_at+1.0}))*between(t,{fx_at+0.85},{fx_at+1.5})':"
                    f"y='(in_h-out_h)/2+13*sin(2*PI*17*(t-{fx_at+1.0}))*between(t,{fx_at+0.85},{fx_at+1.5})'")
