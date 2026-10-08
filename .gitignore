@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# Secrets
+.env
+
+# 本地素材与产物（meme素材包约1.9G，按需本地预处理，不进仓库）
+meme/
+meme_audio/
+output/
+*.mp4
+
+# 系统垃圾
+.DS_Store
+
+# FX中间帧由gen_fx_beam_clash.py生成，不进仓库
+fx/beam_clash/frames/
+fx/beam_clash/audio.wav
