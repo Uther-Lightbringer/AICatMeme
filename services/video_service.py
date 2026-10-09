@@ -4,8 +4,12 @@ import tempfile
 import concurrent.futures
 import subprocess
 from utils.draw_utils import wrap_text
-from core.config import EMOTION_FOLDER, BG_FOLDER, FONT_PATH, FX_FOLDER
+from core.config import EMOTION_FOLDER, BG_FOLDER, FONT_PATH, FX_FOLDER, TEXT_STYLE
+from core.text_style import text_layers
 import imageio_ffmpeg
+
+# 文字样式（可通过 config/.env 的 TEXT_STYLE 切换：meme=黄字红边黑边 / plain=白字黑边底条）
+_TEXT_STYLE = TEXT_STYLE
 
 # 动态获取当前 Python 环境自带的 ffmpeg 绝对路径
 FFMPEG_EXE = "/opt/ffmpeg-bin/ffmpeg" if os.path.exists("/opt/ffmpeg-bin/ffmpeg") else imageio_ffmpeg.get_ffmpeg_exe()
@@ -152,9 +156,13 @@ def process_multi_scene_ffmpeg(index, scene, temp_dir):
         name_txt = write_text_file(temp_dir, f"mn_{index}_{i}.txt", ca['c']['name'])
         dia_txt = write_text_file(temp_dir, f"md_{index}_{i}.txt", wrap_text(f"*{ca['c']['text']}", 12))
         ca['name_y'] = name_y_for(ca['frames'][0], ca['scale'], ca['y_shift'])
-        texts.append(f"drawtext=fontfile='{ff_path(FONT_PATH)}':expansion=none:textfile='{name_txt}':x={x}-text_w/2:y={ca['name_y']}:fontsize=44:fontcolor=yellow:borderw=3:bordercolor=black:box=1:boxcolor=black@0.45:boxborderw=16:enable='between(t,{win_s},{win_e})'")
+        texts.extend(text_layers(_TEXT_STYLE, ff_path(FONT_PATH), name_txt,
+                                 f"{x}-text_w/2", ca['name_y'], 44,
+                                 enable=f"between(t,{win_s},{win_e})"))
         dia_y = 1080 - 210 + (-80 if (layout == 'depth' and ca['row'] == 0) else 0)
-        texts.append(f"drawtext=fontfile='{ff_path(FONT_PATH)}':expansion=none:textfile='{dia_txt}':x={x}-text_w/2:y={dia_y}:fontsize=48:fontcolor=white:borderw=3:bordercolor=black:box=1:boxcolor=black@0.45:boxborderw=16:enable='between(t,{at},{at+min(dur,2.8)})'")
+        texts.extend(text_layers(_TEXT_STYLE, ff_path(FONT_PATH), dia_txt,
+                                 f"{x}-text_w/2", dia_y, 48,
+                                 enable=f"between(t,{at},{at+min(dur,2.8)})"))
 
         delay_ms = int(at * 1000)
         filters.append(f"[{ca['aud_i']}:a]atrim=duration={at+dur},adelay={delay_ms}|{delay_ms},asetpts=PTS-STARTPTS[aa{i}]")
@@ -262,7 +270,7 @@ def process_single_scene_ffmpeg(index, scene, temp_dir):
     texts = []
     
     # 基础文字滤镜参数（去掉了背景框，加上黑色描边）
-    title_filter = f"drawtext=fontfile='{font_safe}':expansion=none:textfile='{title_txt}':x=(w-text_w)/2:y=50:fontsize=75:fontcolor=yellow:borderw=4:bordercolor=black"
+    title_filter = text_layers("title", font_safe, title_txt, "(w-text_w)/2", "50", 75)
     
     if stype == 'single' and len(chars) > 0:
         frames, audio = get_emo_assets(chars[0])
@@ -303,11 +311,12 @@ def process_single_scene_ffmpeg(index, scene, temp_dir):
         dialogue = wrap_text(f"*{chars[0]['text']}", 20)  # 修改为 20 字符换行
         dialogue_txt = write_text_file(temp_dir, f"dial_{index}.txt", dialogue)
         
-        texts.append(title_filter)
+        texts.extend(title_filter)
         # 单人场景：名字紧贴猫头顶（按素材alpha头顶位置推算），台词保留在底部
         name_y = name_y_for(frames[0], 750, 0)
-        texts.append(f"drawtext=fontfile='{font_safe}':expansion=none:textfile='{name_txt}':x=(w-text_w)/2:y={name_y}:fontsize=52:fontcolor=yellow:borderw=3:bordercolor=black:box=1:boxcolor=black@0.45:boxborderw=16")
-        texts.append(f"drawtext=fontfile='{font_safe}':expansion=none:textfile='{dialogue_txt}':x=(w-text_w)/2:y=1080-220:fontsize=52:fontcolor=white:borderw=3:bordercolor=black:box=1:boxcolor=black@0.45:boxborderw=16:line_spacing=-30")
+        texts.extend(text_layers(_TEXT_STYLE, font_safe, name_txt, "(w-text_w)/2", name_y, 52))
+        texts.extend(text_layers(_TEXT_STYLE, font_safe, dialogue_txt, "(w-text_w)/2",
+                                 "1080-220", 52, extra=":line_spacing=-30"))
         
         if fx_on:
             filters.append(f"[{fx_i}:v]setpts=PTS+{fx_at}/TB[fxv]")
@@ -378,16 +387,18 @@ def process_single_scene_ffmpeg(index, scene, temp_dir):
         ld_txt = write_text_file(temp_dir, f"ld_{index}.txt", wrap_text(f"*{chars[0]['text']}", 10))  # 修改为 10 字符换行
         rd_txt = write_text_file(temp_dir, f"rd_{index}.txt", wrap_text(f"*{chars[1]['text']}", 10))  # 修改为 10 字符换行
 
-        texts.append(title_filter)
+        texts.extend(title_filter)
         # 双人场景：名字紧贴各自猫头顶（scale=520，y居中无位移）
         l_name_y = name_y_for(l_frames[0], 520, 0)
         r_name_y = name_y_for(r_frames[0], 520, 0)
-        texts.append(f"drawtext=fontfile='{font_safe}':expansion=none:textfile='{ln_txt}':x=290-text_w/2:y={l_name_y}:fontsize=52:fontcolor=yellow:borderw=3:bordercolor=black:box=1:boxcolor=black@0.45:boxborderw=16")
-        texts.append(f"drawtext=fontfile='{font_safe}':expansion=none:textfile='{rn_txt}':x=790-text_w/2:y={r_name_y}:fontsize=52:fontcolor=yellow:borderw=3:bordercolor=black:box=1:boxcolor=black@0.45:boxborderw=16")
+        texts.extend(text_layers(_TEXT_STYLE, font_safe, ln_txt, "290-text_w/2", l_name_y, 52))
+        texts.extend(text_layers(_TEXT_STYLE, font_safe, rn_txt, "790-text_w/2", r_name_y, 52))
         
         # 台词留在底部，同步修正左侧台词中心对齐 (x=290)
-        texts.append(f"drawtext=fontfile='{font_safe}':expansion=none:textfile='{ld_txt}':enable='lt(t,{dur_l})':x=290-text_w/2:y=1080-260:fontsize=52:fontcolor=white:borderw=3:bordercolor=black:box=1:boxcolor=black@0.45:boxborderw=16:line_spacing=-30")
-        texts.append(f"drawtext=fontfile='{font_safe}':expansion=none:textfile='{rd_txt}':enable='gte(t,{dur_l})':x=790-text_w/2:y=1080-260:fontsize=52:fontcolor=white:borderw=3:bordercolor=black:box=1:boxcolor=black@0.45:boxborderw=16:line_spacing=-30")
+        texts.extend(text_layers(_TEXT_STYLE, font_safe, ld_txt, "290-text_w/2", "1080-260", 52,
+                                 extra=":line_spacing=-30", enable=f"lt(t,{dur_l})"))
+        texts.extend(text_layers(_TEXT_STYLE, font_safe, rd_txt, "790-text_w/2", "1080-260", 52,
+                                 extra=":line_spacing=-30", enable=f"gte(t,{dur_l})"))
         
         if fx_on:
             # 对波: 猫合成后叠特效帧 → 字幕 → 爆炸瞬间屏幕震动(scale+crop位移)
