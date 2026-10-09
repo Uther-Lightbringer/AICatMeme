@@ -81,13 +81,8 @@ def process_multi_scene_ffmpeg(index, scene, temp_dir):
 
     cats = []
     for c in scene['characters']:
-        base = os.path.join(EMOTION_FOLDER, c['emotion'])
-        frames = sorted(glob.glob(os.path.join(base, "frames", "*.png")))
-        if not frames:
-            raise FileNotFoundError(f"找不到帧: {c['emotion']}")
-        audio = os.path.join(base, "audio.mp3")
-        has_audio = os.path.exists(audio) and os.path.getsize(audio) > 2048
-        cats.append({'c': c, 'frames': frames, 'audio': audio if has_audio else None})
+        frames, audio = resolve_character_frames(c)
+        cats.append({'c': c, 'frames': frames, 'audio': audio})
 
     for ca in cats:
         ca['at'] = float(ca['c'].get('at', 0) or 0)
@@ -143,14 +138,12 @@ def process_multi_scene_ffmpeg(index, scene, temp_dir):
         pat, st = image_seq_input(ca['frames'])
         cmd.extend(["-framerate", "30", "-start_number", str(st), "-i", pat])
         ca['anim_i'] = in_idx; in_idx += 1
-        cmd.extend(["-loop", "1", "-i", ca['frames'][0]])
-        ca['still_i'] = in_idx; in_idx += 1
+        # 静态层已移除：改为动态序列循环填满整幕，避免"定格帧叠动态帧"的双影
         if ca['audio']:
             cmd.extend(["-i", ca['audio']])
         else:
             cmd.extend(["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo"])
         ca['aud_i'] = in_idx; in_idx += 1
-        filters.append(f"[{ca['still_i']}:v]scale={ca['scale']}:-1,setsar=1[s{i}]")
         filters.append(f"[{ca['anim_i']}:v]scale={ca['scale']}:-1,setsar=1[a{i}]")
 
         x, at, dur = ca['x'], ca['at'], ca['dur']
@@ -177,8 +170,10 @@ def process_multi_scene_ffmpeg(index, scene, temp_dir):
         win_s = max(0, at - 0.7)
         win_e = min(total, at + dur + 0.7)
         xexpr, yexpr = _xy_expr(ca)
-        filters.append(f"[{prev_v}][s{i}]overlay=x='{xexpr}':y='{yexpr}':enable='between(t,{win_s},{win_e})'[vs{seq}]")
-        filters.append(f"[vs{seq}][a{i}]overlay=x='{xexpr}':y='{yexpr}':enable='between(t,{at},{at+dur+0.2})'[va{seq}]")
+        # 动态序列循环填满从入场前到退场后的整个窗口，取代原来的静态垫底层
+        nf = len(ca['frames'])
+        filters.append(f"[a{i}]loop=loop=-1:size={nf}:start=0,fps=30,trim=duration={total},setpts=PTS-STARTPTS[al{i}]")
+        filters.append(f"[{prev_v}][al{i}]overlay=x='{xexpr}':y='{yexpr}':enable='between(t,{win_s},{win_e})'[va{seq}]")
         prev_v = f"va{seq}"
 
     # 特效: 对波(可选, 帧按 dialogue 双猫口位 290/790 绘制)
@@ -249,13 +244,10 @@ def process_single_scene_ffmpeg(index, scene, temp_dir):
     chars = scene['characters']
     stype = scene['scene_type']
 
-    def get_emo_assets(emo_name):
-        base = os.path.join(EMOTION_FOLDER, emo_name)
-        frames = sorted(glob.glob(os.path.join(base, "frames", "*.png")))
-        if not frames: raise FileNotFoundError(f"找不到帧: {emo_name}")
-        audio = os.path.join(base, "audio.mp3")
-        has_audio = os.path.exists(audio) and os.path.getsize(audio) > 2048
-        return frames, (audio if has_audio else None)
+    def get_emo_assets(c_or_emo):
+        if isinstance(c_or_emo, dict):
+            return resolve_character_frames(c_or_emo)
+        return resolve_character_frames({'name': '', 'emotion': c_or_emo, 'char': ''})
 
     # --- 开始构建 FFmpeg 指令 ---
     cmd = [FFMPEG_EXE, "-y"]
@@ -273,7 +265,7 @@ def process_single_scene_ffmpeg(index, scene, temp_dir):
     title_filter = f"drawtext=fontfile='{font_safe}':expansion=none:textfile='{title_txt}':x=(w-text_w)/2:y=50:fontsize=75:fontcolor=yellow:borderw=4:bordercolor=black"
     
     if stype == 'single' and len(chars) > 0:
-        frames, audio = get_emo_assets(chars[0]['emotion'])
+        frames, audio = get_emo_assets(chars[0])
         dur = len(frames) / 30.0
         concat_txt = create_image_concat_file(frames, temp_dir, f"single_{index}")
         pat, start = image_seq_input(frames)
@@ -334,8 +326,8 @@ def process_single_scene_ffmpeg(index, scene, temp_dir):
         total_dur = dur
 
     elif stype == 'dialogue' and len(chars) >= 2:
-        l_frames, l_audio = get_emo_assets(chars[0]['emotion'])
-        r_frames, r_audio = get_emo_assets(chars[1]['emotion'])
+        l_frames, l_audio = get_emo_assets(chars[0])
+        r_frames, r_audio = get_emo_assets(chars[1])
         
         dur_l = len(l_frames) / 30.0
         dur_r = len(r_frames) / 30.0
@@ -344,13 +336,11 @@ def process_single_scene_ffmpeg(index, scene, temp_dir):
         lpat, lstart = image_seq_input(l_frames)
         rpat, rstart = image_seq_input(r_frames)
 
-        # 输入 1:左侧动图 2:右侧动图 3:右侧静止首帧 4:左侧静止尾帧
+        # 输入 1:左侧动图 2:右侧动图
         cmd.extend(["-framerate", "30", "-start_number", str(lstart), "-i", lpat])
         cmd.extend(["-framerate", "30", "-start_number", str(rstart), "-i", rpat])
-        cmd.extend(["-loop", "1", "-i", r_frames[0]])
-        cmd.extend(["-loop", "1", "-i", l_frames[-1]])
         
-        # 输入 5:左音频 6:右音频
+        # 输入 3:左音频 4:右音频
         cmd.extend(["-i", l_audio] if l_audio else ["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo"])
         cmd.extend(["-i", r_audio] if r_audio else ["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo"])
 
@@ -366,7 +356,7 @@ def process_single_scene_ffmpeg(index, scene, temp_dir):
             cmd.extend(["-framerate", "30", "-start_number", str(fx_start), "-i", fx_pat])
             fx_audio = os.path.join(fx_dir, "audio.wav")
             cmd.extend(["-i", fx_audio] if os.path.exists(fx_audio) else ["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo"])
-            fx_i, fx_aud_i = 7, 8
+            fx_i, fx_aud_i = 5, 6
             fx_dur = len(fx_frames) / 30.0
             fx_at = float(scene.get('fx_at') or 0) or max(0.0, total_dur - fx_dur - 0.6)
             fx_boom = float(scene.get('fx_boom', 2.45) or 0)
@@ -374,15 +364,13 @@ def process_single_scene_ffmpeg(index, scene, temp_dir):
 
         # 视频合成链 (利用 enable 滤镜实现极速帧切换)
         filters.append(f"[0:v]scale=1080:1080:force_original_aspect_ratio=increase,crop=1080:1080,setsar=1,trim=duration={total_dur}[bg]")
-        filters.append("[1:v]scale=520:-1,setsar=1[la]")
-        filters.append(f"[2:v]scale=520:-1,setsar=1,setpts=PTS-STARTPTS+{dur_l}/TB[ra]")
-        filters.append("[3:v]scale=520:-1,setsar=1[r_first]")
-        filters.append("[4:v]scale=520:-1,setsar=1[l_last]")
-        
-        filters.append(f"[bg][r_first]overlay=x=530:y=(H-h)/2:enable='lt(t,{dur_l})'[v1]")
-        filters.append(f"[v1][la]overlay=x=30:y=(H-h)/2:enable='lt(t,{dur_l})'[v2]")
-        filters.append(f"[v2][l_last]overlay=x=30:y=(H-h)/2:enable='gte(t,{dur_l})'[v3]")
-        filters.append(f"[v3][ra]overlay=x=530:y=(H-h)/2:enable='gte(t,{dur_l})'[v4]")
+        # 双猫：各自动态序列循环填满自己那一半时长，不再用"静态尾帧垫底"（消除双影）
+        nl, nr = len(l_frames), len(r_frames)
+        filters.append(f"[1:v]scale=520:-1,setsar=1,loop=loop=-1:size={nl}:start=0,fps=30,trim=duration={total_dur},setpts=PTS-STARTPTS[la]")
+        filters.append(f"[2:v]scale=520:-1,setsar=1,loop=loop=-1:size={nr}:start=0,fps=30,trim=duration={total_dur},setpts=PTS-STARTPTS+{dur_l}/TB[ra]")
+
+        filters.append(f"[bg][la]overlay=x=30:y=(H-h)/2:enable='lt(t,{dur_l})'[v2]")
+        filters.append(f"[v2][ra]overlay=x=530:y=(H-h)/2:enable='gte(t,{dur_l})'[v4]")
 
         # 文本生成
         ln_txt = write_text_file(temp_dir, f"ln_{index}.txt", chars[0]['name'])
@@ -415,8 +403,8 @@ def process_single_scene_ffmpeg(index, scene, temp_dir):
 
         # 音频混合 (右侧音频延后 dur_l 毫秒)
         delay_ms = int(dur_l * 1000)
-        filters.append(f"[5:a]atrim=duration={dur_l},asetpts=PTS-STARTPTS[a1]")
-        filters.append(f"[6:a]atrim=duration={dur_r},adelay={delay_ms}|{delay_ms},asetpts=PTS-STARTPTS[a2]")
+        filters.append(f"[3:a]atrim=duration={dur_l},asetpts=PTS-STARTPTS[a1]")
+        filters.append(f"[4:a]atrim=duration={dur_r},adelay={delay_ms}|{delay_ms},asetpts=PTS-STARTPTS[a2]")
         if fx_on:
             fx_delay = int(fx_at * 1000)
             filters.append(f"[{fx_aud_i}:a]atrim=duration={fx_dur},adelay={fx_delay}|{fx_delay},asetpts=PTS-STARTPTS[af]")
@@ -443,6 +431,46 @@ def process_single_scene_ffmpeg(index, scene, temp_dir):
         raise RuntimeError(f"FFmpeg 渲染失败，场景: {scene['title']}")
 
     return temp_output
+
+
+def resolve_character_frames(c):
+    """统一素材解析：优先 image_assets 图片素材库，回落项目内置 meme/<情绪>。
+
+    - c 是 Character dict（含 name/emotion/char）
+    - 若 c['char'] 非空，或 c['emotion'] 命中 image_assets：
+        从 image_assets 取素材（单图会自动动画化），返回 (frames, audio)
+    - 否则走原逻辑：meme/<emotion>/frames + audio.mp3
+    """
+    from core.image_assets import is_image_asset, resolve_assets
+    role = (c.get('char') or '').strip()
+    emo = (c.get('emotion') or '').strip()
+
+    # 判定是否使用图片素材
+    use_img = False
+    img_role, img_emo = None, None
+    if role and is_image_asset(role):
+        use_img = True
+        img_role, img_emo = role, (emo or role)
+    elif emo and is_image_asset(emo):
+        use_img = True
+        img_role, img_emo = emo, emo
+
+    if use_img:
+        try:
+            frames = resolve_assets(img_role, img_emo)
+            if frames:
+                return frames, None   # 图片素材无配音，静音处理
+        except Exception as e:
+            print(f"⚠️ 图片素材加载失败({img_role}/{img_emo}): {e}，回落内置情绪")
+
+    # 内置情绪素材
+    base = os.path.join(EMOTION_FOLDER, emo)
+    frames = sorted(glob.glob(os.path.join(base, "frames", "*.png")))
+    if not frames:
+        raise FileNotFoundError(f"找不到帧: {emo}")
+    audio = os.path.join(base, "audio.mp3")
+    has_audio = os.path.exists(audio) and os.path.getsize(audio) > 2048
+    return frames, (audio if has_audio else None)
 
 
 def create_video(data, output_path):

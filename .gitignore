@@ -25,3 +25,9 @@ user_submissions.csv
 
 # 字体有版权(中易黑体)，使用者自备
 simhei.ttf
+
+# 图片素材库（用户自己的图片/生成的动画缓存，体积大且属个人素材，不进仓库）
+# 目录结构由代码自动创建，新素材请用 add_image_asset.py 添加
+image_assets/*
+!image_assets/README.md
+!image_assets/.gitkeep

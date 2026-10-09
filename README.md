@@ -17,6 +17,36 @@
 
 ---
 
+### 🖼️ 用自己的图片做角色 / Custom Image Characters
+
+不想用内置猫片素材？把任意图片丢进 `image_assets/`，项目会自动把它变成
+**会呼吸浮动**的序列帧参与渲染 —— 不用切帧、不用绿幕、不用预处理。
+
+```bash
+# 添加一张图作为一个表情
+python3 add_image_asset.py --role 阿尘 --emotion blank --image /path/head.png
+# 一个角色只放一张图（emotion 随便填都用它）
+python3 add_image_asset.py --role 老猫 --image /path/old.png
+# 已切好的序列帧目录
+python3 add_image_asset.py --role 阿尘 --emotion run --frames /path/seq_dir/
+# 查看素材库
+python3 add_image_asset.py --list
+```
+
+剧本里这样引用（新增 `char` 字段指定素材角色）：
+```python
+{"name": "阿尘", "char": "阿尘", "emotion": "blank", "text": "十天后我会成神。", "at": 0}
+```
+
+- 单图会自动加"呼吸感"微动（上下 ±16px / 摇摆 ±8px / 缩放 ±1.4%），循环无缝
+- 图片自动等比缩放到 540×540，不变形；透明 PNG 效果最佳
+- 生成的动画缓存于 `image_assets/.cache/`，改图自动重建
+- 也支持你直接放 `emotion` 用自定义名（不加 `char`），命中素材库即自动启用
+
+详细说明见 [`image_assets/README.md`](image_assets/README.md)。
+
+---
+
 ### 🚀 重磅更新 / Big Update!
 
 微信小程序已正式上线！📱 打开微信，搜索：**AI视频生成猫meme** 即可体验！或直接扫描二维码进入👇

@@ -8,11 +8,12 @@ FX_GUIDE = "可选视觉特效(填特效名或none)：对波beam_clash、烈火f
 
 class Character(BaseModel):
     name: str = Field(description="角色名，简短")
-    emotion: str = Field(description=f"必须严格从以下英文单词中选择：{EMOTIONS}")
+    emotion: str = Field(default="", description=f"表情。既可用项目内置情绪（严格从以下英文单词中选择：{EMOTIONS}），也可填 image_assets/ 下的自定义角色名（直接用图片素材）")
     text: str = Field(description="少于15字的对话文本")
     at: float = Field(default=0.0, description="第几秒开始说话（仅multi模式使用，单位秒）")
     entrance: str = Field(default="none", description="multi专用：入场方式 none/left/right/bottom/top")
     exit: str = Field(default="none", description="multi专用：退场方式 none/left/right/top")
+    char: str = Field(default="", description="图片素材专用：指定 image_assets/<char>/ 下的角色素材。填了优先用 image_assets，emotion 则作为该角色下的表情文件名")
 
 class Scene(BaseModel):
     title: str = Field(description="当前场景的全局标题")
